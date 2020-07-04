@@ -45,6 +45,69 @@ class WC_4nipps_Bradesco_Boleto extends WC_Payment_Gateway {
                 'default' => 'yes'
             ),
 
+            'development' => array(
+                'title'   => __( 'Development mode', 'wc-4nipps-bradesco-boleto' ),
+                'type'    => 'checkbox',
+                'label'   => __( 'Development mode uses homolog endpoints', 'wc-4nipps-bradesco-boleto' ),
+                'default' => 'no'
+            ),
+
+            'beneficiary' => array(
+                'title' => __( 'Beneficiary', 'wc-4nipps-bradesco-boleto' ),
+                'type'        => 'text',
+                'description' => __( 'The beneficiary complete name.', 'wc-4nipps-bradesco-boleto' ),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+
+            'wallet' => array(
+                'title' => __( 'Wallet', 'wc-4nipps-bradesco-boleto' ),
+                'type'        => 'text',
+                'description' => __( 'Wallet code.', 'wc-4nipps-bradesco-boleto' ),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+
+            'header_message' => array(
+                'title' => __( 'Header message', 'wc-4nipps-bradesco-boleto' ),
+                'type'        => 'text',
+                'description' => __( 'The message that will be displayed at the top of the bank slip.', 'wc-4nipps-bradesco-boleto' ),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+
+            'logo_url' => array(
+                'title' => __( 'Logo url', 'wc-4nipps-bradesco-boleto' ),
+                'type'        => 'text',
+                'description' => __( 'Logo url that will be displayed in bank slip.', 'wc-4nipps-bradesco-boleto' ),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+
+            'days_to_expire' => array(
+                'title' => __( 'Days to expire', 'wc-4nipps-bradesco-boleto' ),
+                'type'        => 'text',
+                'description' => __( 'Days that the bank slip will be valid.', 'wc-4nipps-bradesco-boleto' ),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+
+            'merchant_id' => array(
+                'title' => __( 'Merchant id', 'wc-4nipps-bradesco-boleto' ),
+                'type'        => 'text',
+                'description' => __( 'Identifier property provided by Bradesco.', 'wc-4nipps-bradesco-boleto' ),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+
+            'authorization_key' => array(
+                'title' => __( 'Authorization key', 'wc-4nipps-bradesco-boleto' ),
+                'type'        => 'text',
+                'description' => __( 'The access credentials.', 'wc-4nipps-bradesco-boleto' ),
+                'default'     => '',
+                'desc_tip'    => true,
+            ),
+
             'title' => array(
                 'title'       => __( 'Title', 'wc-4nipps-bradesco-boleto' ),
                 'type'        => 'text',
@@ -109,9 +172,15 @@ class WC_4nipps_Bradesco_Boleto extends WC_Payment_Gateway {
         $order = wc_get_order( $order_id );
 
         // Mark as on-hold (we're awaiting the payment)
-        $order->update_status( 'on-hold', __( 'Awaiting offline payment', 'wc-gateway-offline' ) );
+        $order->update_status( 'on-hold', __( 'Awaiting banking slip payment', 'wc-4nipps-bradesco-boleto' ) );
 
-        $this->generateTicket();
+        // If bank slip generation fails set order to failed, raise a error and return
+        $bank_slip_generated = $this->generate_bank_slip($order);
+        if (!$bank_slip_generated) {
+            $order->update_status( 'on-hold', __( 'Failed to generate bank slip', 'wc-4nipps-bradesco-boleto' ) );
+            wc_add_notice( __('Payment error:', 'woothemes') . ' ' . __( 'Failed to generate bank slip.', 'wc-4nipps-bradesco-boleto' ), 'error' );
+            return;
+        }
 
         // Reduce stock levels
         $order->reduce_order_stock();
@@ -122,11 +191,103 @@ class WC_4nipps_Bradesco_Boleto extends WC_Payment_Gateway {
         // Return thankyou redirect
         return array(
             'result' 	=> 'success',
-            'redirect'	=> $this->get_return_url( $order )
+            'redirect'	=> $this->get_return_url( $order ),
         );
     }
 
-    public function generateTicket() {
-        echo '<h1>Chamar boleto aqui</h1>';
+    // define the woocommerce_thankyou callback
+    public function generate_bank_slip( $order ) {
+
+        // Sets the endpoint url, prod or dev if is setted
+        $url = get_option( 'bradesco_boleto_url_prod' );
+        if ($this->get_option('development') == 'yes') {
+            $url = get_option( 'bradesco_boleto_url_dev' );
+        }
+
+        $bank_slip_itens_desc = '';
+        foreach ( $order->get_items() as $item_id => $item ) {
+            $bank_slip_itens_desc .= $item->get_quantity();
+            $bank_slip_itens_desc .= ' ';
+            $bank_slip_itens_desc .= $item->get_name();
+            $bank_slip_itens_desc .= '\n';
+        }
+
+        $expire_date = new DateTime();
+        date_add($expire_date, date_interval_create_from_date_string($this->get_option('days_to_expire') . ' days'));
+
+        $new_data = array(
+            'merchant_id' => $this->get_option('merchant_id'),
+            'meio_pagamento' => '300',
+            'pedido' => array(
+                'numero' => strval($order->get_id()),
+                'valor' => intval(preg_replace( '/[^0-9]/', '', strval($order->get_total()))),
+                "descricao" => "bank_slip_itens_desc",
+            ),
+            'comprador' => array(
+                'nome' => $order->get_formatted_billing_full_name(),
+                'documento' => preg_replace( '/[^0-9]/', '', $order->get_meta( '_billing_cpf' )),
+                'endereco' => array(
+                    'cep' => preg_replace( '/[^0-9]/', '', $order->get_billing_postcode()),
+                    'logradouro' => $order->get_billing_address_1(),
+                    'numero' => $order->get_meta( '_billing_number' ),
+                    'bairro' => $order->get_meta( '_billing_neighborhood' ),
+                    // 'complemento' => 'vetvfgef', // tentar tirar
+                    'cidade' => $order->get_billing_city(),
+                    'uf' => $order->get_billing_state(),
+                ),
+            ),
+            'boleto' => array(
+                'beneficiario' => $this->get_option('beneficiary'),
+                'carteira' => $this->get_option('wallet'), // numero
+                'nosso_numero' => substr((new DateTime())->format('ymdHisu'), 0, 11),
+                'data_emissao' => (new DateTime())->format('Y\-m\-d'),
+                'data_vencimento' => $expire_date->format('Y\-m\-d'), // numero
+                'valor_titulo' => intval(preg_replace( '/[^0-9]/', '', strval($order->get_total()))),
+                'url_logotipo' => $this->get_option('logo_url'),
+                'mensagem_cabecalho' => $this->get_option('header_message'),
+                'tipo_renderizacao' => '2',
+                // 'instrucoes' => new ArrayObject(), // tentar tirar
+                // 'registro' => new ArrayObject(), // tentar tirar
+            ),
+            // 'token_request_confirmacao_pagamento' => 'vtrshbtuyjvvsryhnbt', // parece interessante completar a ordem quando receber  // tentar tirar
+        );
+
+        $payload = json_encode($new_data);
+
+        //open connection
+        $ch = curl_init($url);
+
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+
+        $encoded_auth_key = base64_encode($this->get_option('merchant_id') . ':' . $this->get_option('authorization_key'));
+
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'Content-Type:application/json',
+            'Accept:application/json',
+            'Authorization: Basic ' . $encoded_auth_key
+        ));
+
+        //So that curl_exec returns the contents of the cURL; rather than echoing it
+        curl_setopt($ch,CURLOPT_RETURNTRANSFER, true);
+
+        //execute post
+        $result = curl_exec($ch);
+
+        $result_decoded = json_decode($result);
+        set_bradesco_boleto_url($order->get_id(), $result_decoded->boleto->url_acesso);
+
+        if (curl_errno($ch)) {
+            $error_msg = curl_error($ch);
+        }
+
+        // close connection
+        curl_close($ch);
+
+        // rise a error
+        if (isset($error_msg) || intval(curl_getinfo($ch)['http_code']) != 201 || intval($result_decoded->status->codigo) < 0) {
+            return;
+        }
+
+        return $result_decoded;
     }
 }
