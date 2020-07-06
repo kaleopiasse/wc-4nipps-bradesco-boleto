@@ -6,6 +6,11 @@
  */
 function wc_boleto_bradesco_install() {
 	global $wpdb;
+
+	// add the nedded options
+	add_option( 'bradesco_boleto_url_dev', 'https://homolog.meiosdepagamentobradesco.com.br/apiboleto/transacao' );
+	add_option( 'bradesco_boleto_url_prod', 'https://meiosdepagamentobradesco.com.br/apiboleto/transacao' );
+
 	$charset_collate = $wpdb->get_charset_collate();
 	$table_name = $wpdb->prefix . 'wc_bradesco_boleto';
 
@@ -18,9 +23,5 @@ function wc_boleto_bradesco_install() {
 
 	require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
 	dbDelta( $sql );
-
-	// add the nedded options
-	add_option( 'bradesco_boleto_url_dev', 'https://homolog.meiosdepagamentobradesco.com.br/apiboleto/transacao' );
-	add_option( 'bradesco_boleto_url_prod', 'https://meiosdepagamentobradesco.com.br/apiboleto/transacao' );
 }
 register_activation_hook( __FILE__, 'wc_boleto_bradesco_install' );

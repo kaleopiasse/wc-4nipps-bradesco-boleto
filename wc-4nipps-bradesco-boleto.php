@@ -65,9 +65,9 @@ if ( ! class_exists( 'WC_4nipps_Bradesco_Boleto' ) ) :
 	function wc_4nipps_bradesco_boleto_init() {
 		require_once 'includes/wc_4nipps_bradesco_boleto_gateway.php';
 	}
-endif;
 
-require_once 'plugin-init.php';
-require_once 'includes/functions.php';
+	require_once 'plugin-init.php';
+	require_once 'includes/functions.php';
+endif;
 
 

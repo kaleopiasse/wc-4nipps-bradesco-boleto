@@ -56,13 +56,25 @@ add_action( 'rest_api_init', function ( $server ) {
 
 add_action( 'woocommerce_thankyou', function($order_id) {
     $order = wc_get_order(intval($order_id));
-    // $parts = explode(' ', $order->get_billing_address_1());
-    // $last = $parts[sizeof($parts) - 1];
-    // print_r(preg_replace( '/[^0-9]/', '', $last));die;
-    // print_r(trim(preg_replace( '/[^a-zA-Z\s]/', '', $order->get_billing_address_1())));die;
 	if ($order->get_payment_method() == 'wc_4nipps_bradesco_boleto') {
 		$url = get_bradesco_boleto_url($order_id);
 		if ($url)
-			echo '<a class="bank-slip-btn" href="' . $url . '" target="_blank">baixar boleto</a>';
+            echo '
+                <style>
+                    .a-as-button {
+                        font: bold 16px Arial;
+                        text-decoration: none;
+                        background-color: #EEEEEE;
+                        color: #333333;
+                        border-top: 1px solid #CCCCCC;
+                        border-right: 1px solid #333333;
+                        border-bottom: 1px solid #333333;
+                        border-left: 1px solid #CCCCCC;
+                    }
+                </style>
+                <div class="row pl-3">
+                    <a class="bank-slip-btn a-as-button py-3 px-4 mb-5" href="' . $url . '" target="_blank"><i class="fa fa-barcode mr-2" aria-hidden="true"></i>baixar boleto</a>
+                </div>
+            ';
 	}
 });
